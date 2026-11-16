@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Clean Album Artwork Finder</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      margin: 0;
+      padding: 32px 16px;
+    }
+    .container {
+      max-width: 1140px;
+      margin: 0 auto;
+      background: #1e293b;
+      padding: 28px;
+      border-radius: 14px;
+      border: 1px solid #334155;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+    h1 { margin-top: 0; font-size: 1.6rem; color: #38bdf8; }
+    p { color: #94a3b8; font-size: 0.95rem; line-height: 1.5; }
+
+    .input-wrapper { margin-bottom: 12px; }
+    textarea {
+      width: 100%;
+      height: 135px;
+      background: #0f172a;
+      color: #f1f5f9;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px;
+      box-sizing: border-box;
+      font-family: monospace;
+      font-size: 0.9rem;
+      resize: vertical;
+    }
+    textarea:focus { outline: none; border-color: #38bdf8; }
+
+    .file-drop-area {
+      border: 2px dashed #334155;
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.85rem;
+      margin-top: 8px;
+      cursor: pointer;
+      background: #0f172a;
+    }
+    .file-drop-area:hover { border-color: #38bdf8; color: #cbd5e1; }
+
+    .controls { display: flex; align-items: center; gap: 10px; margin-top: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+    button {
+      background: #0284c7;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.88rem;
+    }
+    button:hover { background: #0369a1; }
+    button.secondary { background: #334155; }
+    button.secondary:hover { background: #475569; }
+    button.success { background: #059669; }
+    button.success:hover { background: #047857; }
+    button.purple { background: #7c3aed; }
+    button.purple:hover { background: #6d28d9; }
+    button:disabled { background: #475569; cursor: not-allowed; }
+    
+    select {
+      background: #0f172a;
+      color: #f8fafc;
+      border: 1px solid #334155;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+
+    #status { color: #94a3b8; font-size: 0.9rem; margin-left: 4px; }
+
+    .results { margin-top: 28px; }
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .section-title { font-size: 1.15rem; color: #e2e8f0; font-weight: 600; }
+    .export-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .export-actions button { padding: 7px 12px; font-size: 0.8rem; }
+
+    .links-box {
+      width: 100%;
+      height: 105px;
+      background: #0f172a;
+      color: #38bdf8;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 10px;
+      box-sizing: border-box;
+      font-family: monospace;
+      font-size: 0.82rem;
+      margin-bottom: 24px;
+    }
+    
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 18px;
+    }
+    .card {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .card.low-confidence { border-color: #f59e0b; }
+    .card.manual-override { border-color: #a855f7; }
+    .img-wrapper {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: #000;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card img.main-art {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .card-body {
+      padding: 12px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .card-input-ref {
+      font-size: 0.72rem;
+      background: rgba(56, 189, 248, 0.08);
+      border-left: 2px solid #38bdf8;
+      padding: 4px 6px;
+      margin-bottom: 8px;
+      border-radius: 0 4px 4px 0;
+      color: #94a3b8;
+      line-height: 1.3;
+      word-break: break-word;
+    }
+    .card-input-ref strong {
+      color: #38bdf8;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.65rem;
+      display: block;
+      margin-bottom: 1px;
+    }
+
+    .card-title {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #f1f5f9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-artist {
+      color: #94a3b8;
+      font-size: 0.8rem;
+      margin-top: 2px;
+      margin-bottom: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badge-row { display: flex; gap: 5px; margin-bottom: 7px; flex-wrap: wrap; }
+    .badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .badge.high { color: #10b981; background: rgba(16, 185, 129, 0.15); }
+    .badge.review { color: #f59e0b; background: rgba(245, 158, 11, 0.18); }
+    .badge.manual { color: #c084fc; background: rgba(168, 85, 247, 0.18); }
+    .badge.source { color: #cbd5e1; background: #334155; }
+    .badge.release-type { color: #38bdf8; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.25); }
+
+    .platforms-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+      margin-bottom: 10px;
+      padding-top: 8px;
+      border-top: 1px solid #1e293b;
+    }
+    .platform-pill {
+      display: block;
+      text-align: center;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 4px 6px;
+      border-radius: 4px;
+      text-decoration: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .platform-pill.unavailable {
+      background: rgba(15, 23, 42, 0.6);
+      color: #475569;
+      border: 1px solid #1e293b;
+      cursor: default;
+    }
+    .platform-pill.available-apple {
+      background: rgba(250, 45, 72, 0.14);
+      color: #fb7185;
+      border: 1px solid rgba(250, 45, 72, 0.3);
+    }
+    .platform-pill.available-apple:hover { background: rgba(250, 45, 72, 0.25); color: #fff; }
+    
+    .platform-pill.available-spotify {
+      background: rgba(29, 185, 84, 0.14);
+      color: #4ade80;
+      border: 1px solid rgba(29, 185, 84, 0.3);
+    }
+    .platform-pill.available-spotify:hover { background: rgba(29, 185, 84, 0.25); color: #fff; }
+
+    .platform-pill.available-tidal {
+      background: rgba(226, 232, 240, 0.12);
+      color: #e2e8f0;
+      border: 1px solid rgba(226, 232, 240, 0.3);
+    }
+    .platform-pill.available-tidal:hover { background: rgba(226, 232, 240, 0.25); color: #fff; }
+
+    .platform-pill.available-bandcamp {
+      background: rgba(98, 153, 172, 0.16);
+      color: #7dd3fc;
+      border: 1px solid rgba(98, 153, 172, 0.35);
+    }
+    .platform-pill.available-bandcamp:hover { background: rgba(98, 153, 172, 0.3); color: #fff; }
+
+    .card a.primary-btn {
+      display: block;
+      text-align: center;
+      background: #1e293b;
+      color: #38bdf8;
+      text-decoration: none;
+      padding: 7px 10px;
+      border-radius: 5px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border: 1px solid #334155;
+    }
+    .card a.primary-btn:hover { background: #334155; color: #fff; }
+
+    .alternates-box {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed #334155;
+    }
+    .alternates-label {
+      font-size: 0.7rem;
+      color: #94a3b8;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+    .alternates-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .alt-thumb-wrapper {
+      cursor: pointer;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid #334155;
+      aspect-ratio: 1 / 1;
+    }
+    .alt-thumb-wrapper:hover { border-color: #38bdf8; }
+    .alt-thumb-wrapper.active-alt { border: 2px solid #10b981; }
+    .alt-thumb-wrapper img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    .not-found-container {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid #ef4444;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+    .not-found-container h3 { margin: 0 0 12px 0; color: #f87171; font-size: 1rem; }
+    .not-found-list {
+      margin: 0;
+      padding-left: 0;
+      list-style: none;
+      font-size: 0.88rem;
+      line-height: 1.6;
+    }
+    .not-found-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(239, 68, 68, 0.15);
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .not-found-item:last-child { border-bottom: none; }
+    .not-found-label { color: #fca5a5; font-weight: 500; min-width: 220px; }
+    .not-found-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      flex: 1;
+      justify-content: flex-end;
+    }
+    .manual-url-input {
+      background: #0f172a;
+      border: 1px solid #475569;
+      color: #f8fafc;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      width: 210px;
+      font-family: monospace;
+    }
+    .manual-url-input:focus { outline: none; border-color: #a855f7; }
+    .apply-url-btn {
+      background: #7c3aed;
+      color: #fff;
+      border: none;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .apply-url-btn:hover { background: #6d28d9; }
+
+    .search-btn {
+      display: inline-block;
+      text-decoration: none;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+    }
+    .btn-google {
+      background: rgba(56, 189, 248, 0.12);
+      color: #38bdf8;
+      border-color: rgba(56, 189, 248, 0.3);
+    }
+    .btn-google:hover { background: rgba(56, 189, 248, 0.25); color: #7dd3fc; }
+    .btn-bandcamp {
+      background: rgba(98, 153, 172, 0.15);
+      color: #629aa9;
+      border-color: rgba(98, 153, 172, 0.35);
+    }
+    .btn-bandcamp:hover { background: rgba(98, 153, 172, 0.3); color: #99cedd; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Multi-Source Album Artwork Finder</h1>
+    <p>Searches <strong>Apple Music / iTunes</strong>, <strong>Deezer</strong>, <strong>MusicBrainz / Cover Art Archive</strong>, and <strong>Bandcamp</strong>. Automatically detects release format and resolves platform availability links.</p>
+
+    <div class="input-wrapper">
+      <textarea id="inputList" placeholder="Paste your list here (e.g. Artist - Album)..."></textarea>
+      <div class="file-drop-area" id="dropArea" onclick="document.getElementById('fileInput').click()">
+        Or click to upload / drag &amp; drop a .txt or .csv file here
+        <input type="file" id="fileInput" accept=".txt,.csv" style="display: none;">
+      </div>
+    </div>
+    
+    <div class="controls">
+      <button type="button" id="searchBtn" onclick="runBatch()">Search Covers</button>
+      <button type="button" class="secondary" onclick="clearInput()">Clear</button>
+      <label style="font-size: 0.82rem; color: #94a3b8; display: inline-flex; align-items: center; gap: 5px; margin-left: 6px;">
+        <input type="checkbox" id="enableBandcampProxy" checked> Auto-check Bandcamp
+      </label>
+      <label style="font-size: 0.82rem; color: #94a3b8; display: inline-flex; align-items: center; gap: 5px; margin-left: 6px;">
+        <input type="checkbox" id="enablePlatformLinks" checked> Resolve streaming platform links
+      </label>
+      <span id="status"></span>
+    </div>
+
+    <div class="results" id="resultsSection" style="display: none;">
+      <div id="notFoundBox" class="not-found-container" style="display: none;">
+        <h3>Albums Not Found (Paste Direct Image URL to Override)</h3>
+        <ul id="notFoundList" class="not-found-list"></ul>
+      </div>
+
+      <div class="section-header">
+        <div class="section-title">Direct Image Links</div>
+        <div class="export-actions">
+          <button type="button" class="secondary" id="copyBtn" onclick="copyLinks()">Copy Links</button>
+          <button type="button" class="success" onclick="exportCsv()">Export CSV</button>
+          <select id="zipFormatSelect" title="Choose output image format and dimensions for ZIP archive">
+            <option value="original">ZIP: Original Master (.jpg)</option>
+            <option value="1000_jpg">ZIP: 1000x1000 (.jpg)</option>
+            <option value="1000_png">ZIP: 1000x1000 (.png)</option>
+            <option value="700_jpg">ZIP: 700x700 (.jpg)</option>
+          </select>
+          <button type="button" class="purple" id="zipBtn" onclick="downloadAllZip()">Download All (.ZIP)</button>
+        </div>
+      </div>
+      <textarea id="outputLinks" class="links-box" readonly></textarea>
+      
+      <div class="section-header">
+        <div class="section-title">Cover Previews</div>
+      </div>
+      <div class="grid" id="cardGrid"></div>
+    </div>
+  </div>
+
+  <script>
+    var batchRecords = [];
+
+    function clearInput() {
+      var inputEl = document.getElementById('inputList');
+      inputEl.value = '';
+      inputEl.focus();
+    }
+
+    function handleFile(file) {
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById('inputList').value = e.target.result;
+      };
+      reader.readAsText(file);
+    }
+
+    var dropArea = document.getElementById('dropArea');
+    var fileInput = document.getElementById('fileInput');
+
+    if (fileInput) {
+      fileInput.addEventListener('change', function(e) {
+        if (e.target.files.length) handleFile(e.target.files[0]);
+      });
+    }
+
+    if (dropArea) {
+      ['dragover', 'dragenter'].forEach(function(name) {
+        dropArea.addEventListener(name, function(e) {
+          e.preventDefault();
+          dropArea.style.borderColor = '#38bdf8';
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(function(name) {
+        dropArea.addEventListener(name, function(e) {
+          e.preventDefault();
+          dropArea.style.borderColor = '#334155';
+        });
+      });
+
+      dropArea.addEventListener('drop', function(e) {
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+      });
+    }
+
+    function handleImageFallback(imgElement) {
+      var src = imgElement.src;
+      if (src.indexOf('1500x1500bb') !== -1) {
+        imgElement.src = src.replace('1500x1500bb', '1000x1000bb');
+      } else if (src.indexOf('1000x1000bb') !== -1) {
+        imgElement.src = src.replace('1000x1000bb', '600x600bb');
+      } else if (src.indexOf('_10.jpg') !== -1) {
+        imgElement.src = src.replace('_10.jpg', '_16.jpg');
+      } else {
+        imgElement.onerror = null;
+      }
+    }
+
+    function parseInputLine(line) {
+      var normalized = line.replace(/\t/g, ' - ').replace(/[\u2013\u2014]/g, '-');
+      var dashIdx = normalized.indexOf(' - ');
+      if (dashIdx !== -1) {
+        return {
+          artist: normalized.substring(0, dashIdx).trim(),
+          album: normalized.substring(dashIdx + 3).trim()
+        };
+      }
+      var commaParts = normalized.split(',');
+      if (commaParts.length === 2) {
+        return {
+          artist: commaParts[0].trim(),
+          album: commaParts[1].trim()
+        };
+      }
+      return { artist: normalized.trim(), album: '' };
+    }
+
+    function refreshOutputLinks() {
+      var lines = batchRecords.map(function(rec) {
+        if (rec.status === 'Found') {
+          return rec.input + ' -> ' + rec.url;
+        }
+        return rec.input + ' -> Not Found';
+      });
+      document.getElementById('outputLinks').value = lines.join('\n');
+    }
+
+    function buildPlatformPillsHtml(links, checkedStreaming, checkedBandcamp) {
+      function makePill(label, url, availClass, unavailText) {
+        if (url) {
+          return '<a href="' + url + '" target="_blank" rel="noopener noreferrer" class="platform-pill ' + availClass + '">' + label + ' &#8599;</a>';
+        }
+        return '<span class="platform-pill unavailable">' + unavailText + '</span>';
+      }
+
+      var appleHtml = makePill('Apple Music', links.appleMusic, 'available-apple', 'No Apple Music');
+      var spotifyHtml = checkedStreaming
+        ? makePill('Spotify', links.spotify, 'available-spotify', 'No Spotify')
+        : '<span class="platform-pill unavailable">Spotify Skipped</span>';
+      var tidalHtml = checkedStreaming
+        ? makePill('Tidal', links.tidal, 'available-tidal', 'No Tidal')
+        : '<span class="platform-pill unavailable">Tidal Skipped</span>';
+      var bcHtml = (checkedBandcamp || links.bandcamp)
+        ? makePill('Bandcamp', links.bandcamp, 'available-bandcamp', 'No Bandcamp')
+        : '<span class="platform-pill unavailable">Bandcamp Skipped</span>';
+
+      return appleHtml + spotifyHtml + tidalHtml + bcHtml;
+    }
+
+    function renderCardElement(recIndex, data, isManual) {
+      var grid = document.getElementById('cardGrid');
+      var card = document.createElement('div');
+      card.id = 'card_' + recIndex;
+      card.className = 'card ' + (isManual ? 'manual-override' : (data.isHighConfidence ? '' : 'low-confidence'));
+
+      var alternatesHtml = '';
+      if (data.alternates && data.alternates.length > 1) {
+        var thumbs = data.alternates.map(function(alt, idx) {
+          var safeTitle = (alt.collectionName || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+          var safeArtist = (alt.artistName || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+          var altRelType = alt.releaseType || 'Album';
+          var altAppleUrl = (alt.appleMusicUrl || '').replace(/'/g, '&#39;');
+          return '<div class="alt-thumb-wrapper ' + (idx === 0 ? 'active-alt' : '') + '" ' +
+                 'title="' + safeTitle + ' by ' + safeArtist + ' (' + altRelType + ')" ' +
+                 'onclick="selectAlternate(' + recIndex + ', ' + idx + ', \'' + alt.hiResUrl + '\', \'' + safeTitle + '\', \'' + safeArtist + '\', \'' + altRelType + '\', \'' + altAppleUrl + '\')">' +
+                 '<img src="' + alt.thumbUrl + '" alt="Option ' + (idx + 1) + '">' +
+                 '</div>';
+        }).join('');
+
+        alternatesHtml = '<div class="alternates-box">' +
+                         '<div class="alternates-label">Top Candidates (Click to Swap)</div>' +
+                         '<div class="alternates-grid">' + thumbs + '</div>' +
+                         '</div>';
+      }
+
+      var rawInput = batchRecords[recIndex].input;
+      var safeInputDisplay = rawInput.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      var badgeClass = isManual ? 'manual' : (data.isHighConfidence ? 'high' : 'review');
+      var badgeText = isManual ? 'Manual' : (data.isHighConfidence ? 'Matched' : 'Review');
+
+      var checkedStreaming = document.getElementById('enablePlatformLinks').checked;
+      var checkedBandcamp = document.getElementById('enableBandcampProxy').checked;
+      var platformsHtml = buildPlatformPillsHtml(data.platforms || {}, checkedStreaming, checkedBandcamp);
+
+      card.innerHTML = 
+        '<div class="img-wrapper">' +
+          '<img src="' + data.hiResUrl + '" alt="' + (data.matchedTitle || '') + '" class="main-art" loading="lazy" onerror="handleImageFallback(this)">' +
+        '</div>' +
+        '<div class="card-body">' +
+          '<div>' +
+            '<div class="card-input-ref"><strong>Your Input</strong>' + safeInputDisplay + '</div>' +
+            '<div class="badge-row">' +
+              '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' +
+              '<span class="badge release-type" id="reltype_' + recIndex + '">' + (data.releaseType || 'Album') + '</span>' +
+              '<span class="badge source">' + data.source + '</span>' +
+            '</div>' +
+            '<div class="card-title" title="' + (data.matchedTitle || '') + '">' + (data.matchedTitle || '') + '</div>' +
+            '<div class="card-artist" title="' + (data.matchedArtist || '') + '">' + (data.matchedArtist || '') + '</div>' +
+          '</div>' +
+          '<div>' +
+            '<div class="platforms-grid" id="platforms_' + recIndex + '">' + platformsHtml + '</div>' +
+            '<a href="' + data.hiResUrl + '" target="_blank" rel="noopener noreferrer" class="primary-btn">Open Image</a>' +
+            alternatesHtml +
+          '</div>' +
+        '</div>';
+      grid.appendChild(card);
+    }
+
+    function applyManualUrl(recIndex) {
+      var inputField = document.getElementById('manual_url_' + recIndex);
+      if (!inputField) return;
+      var url = inputField.value.trim();
+      if (!url || url.indexOf('http') !== 0) {
+        alert('Please paste a valid image URL starting with http:// or https://');
+        return;
+      }
+
+      var rec = batchRecords[recIndex];
+      var parsed = parseInputLine(rec.input);
+
+      rec.status = 'Found';
+      rec.matchedArtist = parsed.artist;
+      rec.matchedTitle = parsed.album || rec.input;
+      rec.releaseType = 'Album';
+      rec.source = 'Manual Paste';
+      rec.url = url;
+      rec.platforms = { appleMusic: null, spotify: null, tidal: null, bandcamp: null };
+
+      refreshOutputLinks();
+
+      var li = document.getElementById('nf_item_' + recIndex);
+      if (li && li.parentNode) {
+        li.parentNode.removeChild(li);
+      }
+      var nfList = document.getElementById('notFoundList');
+      if (nfList && nfList.children.length === 0) {
+        document.getElementById('notFoundBox').style.display = 'none';
+      }
+
+      renderCardElement(recIndex, {
+        matchedArtist: rec.matchedArtist,
+        matchedTitle: rec.matchedTitle,
+        releaseType: 'Album',
+        source: 'Manual Paste',
+        isHighConfidence: true,
+        hiResUrl: url,
+        platforms: rec.platforms
+      }, true);
+    }
+
+    async function selectAlternate(recordIndex, altIdx, newUrl, newTitle, newArtist, newRelType, newAppleUrl) {
+      var card = document.getElementById('card_' + recordIndex);
+      if (!card) return;
+      
+      var imgEl = card.querySelector('.main-art');
+      imgEl.src = newUrl;
+      card.querySelector('.card-title').textContent = newTitle;
+      card.querySelector('.card-title').title = newTitle;
+      card.querySelector('.card-artist').textContent = newArtist;
+      card.querySelector('.card-artist').title = newArtist;
+      card.querySelector('.primary-btn').href = newUrl;
+
+      var relBadge = document.getElementById('reltype_' + recordIndex);
+      if (relBadge && newRelType) {
+        relBadge.textContent = newRelType;
+      }
+
+      var thumbs = card.querySelectorAll('.alt-thumb-wrapper');
+      for (var i = 0; i < thumbs.length; i++) {
+        if (i === altIdx) thumbs[i].classList.add('active-alt');
+        else thumbs[i].classList.remove('active-alt');
+      }
+
+      if (batchRecords[recordIndex]) {
+        batchRecords[recordIndex].matchedTitle = newTitle;
+        batchRecords[recordIndex].matchedArtist = newArtist;
+        batchRecords[recordIndex].releaseType = newRelType || batchRecords[recordIndex].releaseType;
+        batchRecords[recordIndex].url = newUrl;
+        refreshOutputLinks();
+
+        // Re-fetch platform links for the newly selected edition via backend API
+        var checkPlatforms = document.getElementById('enablePlatformLinks').checked;
+        var checkBandcamp = document.getElementById('enableBandcampProxy').checked;
+        var apiUrl = '/api/search?artist=' + encodeURIComponent(newArtist) +
+                     '&album=' + encodeURIComponent(newTitle) +
+                     '&bandcamp=' + checkBandcamp +
+                     '&platforms=' + checkPlatforms;
+        try {
+          var res = await fetch(apiUrl);
+          if (res.ok) {
+            var updated = await res.json();
+            if (updated.platforms) {
+              batchRecords[recordIndex].platforms = updated.platforms;
+              var platGrid = document.getElementById('platforms_' + recordIndex);
+              if (platGrid) {
+                platGrid.innerHTML = buildPlatformPillsHtml(updated.platforms, checkPlatforms, checkBandcamp);
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    function copyLinks() {
+      var outputBox = document.getElementById('outputLinks');
+      outputBox.select();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(outputBox.value).then(function() {
+          var btn = document.getElementById('copyBtn');
+          var orig = btn.textContent;
+          btn.textContent = 'Copied!';
+          setTimeout(function() { btn.textContent = orig; }, 1800);
+        });
+      } else {
+        document.execCommand('copy');
+      }
+    }
+
+    function exportCsv() {
+      if (!batchRecords.length) return;
+      var headers = [
+        'Input',
+        'Status',
+        'Release Type',
+        'Matched Artist',
+        'Matched Album',
+        'Source',
+        'Image URL',
+        'Apple Music URL',
+        'Spotify URL',
+        'Tidal URL',
+        'Bandcamp URL'
+      ];
+      var csvRows = [headers.join(',')];
+
+      batchRecords.forEach(function(rec) {
+        var p = rec.platforms || {};
+        var row = [
+          rec.input,
+          rec.status,
+          rec.releaseType || '',
+          rec.matchedArtist || '',
+          rec.matchedTitle || '',
+          rec.source || '',
+          rec.url || '',
+          p.appleMusic || 'Not Available',
+          p.spotify || 'Not Available',
+          p.tidal || 'Not Available',
+          p.bandcamp || 'Not Available'
+        ].map(function(val) {
+          return '"' + String(val).replace(/"/g, '""') + '"';
+        });
+        csvRows.push(row.join(','));
+      });
+
+      var blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      var link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'album_artwork_results_' + new Date().toISOString().slice(0, 10) + '.csv';
+      link.click();
+    }
+
+    function loadJSZip() {
+      return new Promise(function(resolve) {
+        if (typeof window.JSZip !== 'undefined') return resolve(window.JSZip);
+        var script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        script.onload = function() { resolve(window.JSZip); };
+        script.onerror = function() { resolve(null); };
+        document.body.appendChild(script);
+      });
+    }
+
+    function fetchAndProcessImageBlob(url, formatMode) {
+      return new Promise(function(resolve) {
+        // Use our own Cloudflare /api/image proxy to guarantee CORS-clean binary retrieval
+        var proxyUrl = '/api/image?url=' + encodeURIComponent(url);
+        fetch(proxyUrl)
+          .then(function(res) {
+            if (!res.ok) throw new Error('Proxy fetch failed');
+            return res.blob();
+          })
+          .then(function(blob) {
+            if (formatMode === 'original') {
+              return resolve({ blob: blob, ext: 'jpg' });
+            }
+
+            var parts = formatMode.split('_');
+            var targetSize = parseInt(parts[0], 10) || 1000;
+            var targetExt = parts[1] || 'jpg';
+            var mimeType = targetExt === 'png' ? 'image/png' : 'image/jpeg';
+
+            var img = new Image();
+            var objUrl = URL.createObjectURL(blob);
+            img.onload = function() {
+              var canvas = document.createElement('canvas');
+              canvas.width = targetSize;
+              canvas.height = targetSize;
+              var ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, targetSize, targetSize);
+              URL.revokeObjectURL(objUrl);
+
+              canvas.toBlob(function(convertedBlob) {
+                resolve(convertedBlob ? { blob: convertedBlob, ext: targetExt } : { blob: blob, ext: 'jpg' });
+              }, mimeType, 0.92);
+            };
+            img.onerror = function() {
+              URL.revokeObjectURL(objUrl);
+              resolve({ blob: blob, ext: 'jpg' });
+            };
+            img.src = objUrl;
+          })
+          .catch(function() {
+            resolve(null);
+          });
+      });
+    }
+
+    async function downloadAllZip() {
+      var foundItems = batchRecords.filter(function(r) { return r.status === 'Found' && r.url; });
+      if (!foundItems.length) {
+        alert('No matched album covers available to download.');
+        return;
+      }
+
+      var zipBtn = document.getElementById('zipBtn');
+      var statusEl = document.getElementById('status');
+      var formatMode = document.getElementById('zipFormatSelect').value;
+      var origBtnText = zipBtn.textContent;
+
+      zipBtn.disabled = true;
+      statusEl.textContent = 'Loading ZIP packer...';
+
+      var JSZipLib = await loadJSZip();
+      if (!JSZipLib) {
+        alert('Could not load JSZip library.');
+        zipBtn.disabled = false;
+        zipBtn.textContent = origBtnText;
+        statusEl.textContent = '';
+        return;
+      }
+
+      var zip = new JSZipLib();
+      var addedCount = 0;
+
+      for (var i = 0; i < foundItems.length; i++) {
+        var item = foundItems[i];
+        statusEl.textContent = 'Packaging ' + (i + 1) + ' of ' + foundItems.length + ' into ZIP...';
+        
+        var processed = await fetchAndProcessImageBlob(item.url, formatMode);
+        if (processed && processed.blob) {
+          var safeFilename = (item.matchedArtist + ' - ' + item.matchedTitle)
+            .replace(/[\\/:*?"<>|]/g, '_')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (!safeFilename) safeFilename = 'cover_' + (i + 1);
+          zip.file(safeFilename + '.' + processed.ext, processed.blob);
+          addedCount++;
+        }
+      }
+
+      if (addedCount === 0) {
+        statusEl.textContent = 'Could not fetch image files.';
+        zipBtn.disabled = false;
+        zipBtn.textContent = origBtnText;
+        return;
+      }
+
+      statusEl.textContent = 'Generating ZIP archive...';
+      var content = await zip.generateAsync({ type: 'blob' });
+      var link = document.createElement('a');
+      link.href = URL.createObjectURL(content);
+      link.download = 'album_covers_' + new Date().toISOString().slice(0, 10) + '.zip';
+      link.click();
+
+      statusEl.textContent = 'Downloaded ZIP with ' + addedCount + ' covers!';
+      zipBtn.disabled = false;
+      zipBtn.textContent = origBtnText;
+    }
+
+    async function runBatch() {
+      var rawText = document.getElementById('inputList').value;
+      if (!rawText || !rawText.trim()) {
+        alert('Please enter at least one artist and album.');
+        return;
+      }
+
+      var lines = rawText
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .split('\n')
+        .map(function(l) { return l.trim(); })
+        .filter(Boolean);
+
+      var btn = document.getElementById('searchBtn');
+      var status = document.getElementById('status');
+      var grid = document.getElementById('cardGrid');
+      var outputLinks = document.getElementById('outputLinks');
+      var notFoundBox = document.getElementById('notFoundBox');
+      var notFoundList = document.getElementById('notFoundList');
+      var useBandcamp = document.getElementById('enableBandcampProxy').checked;
+      var usePlatforms = document.getElementById('enablePlatformLinks').checked;
+
+      btn.disabled = true;
+      grid.innerHTML = '';
+      outputLinks.value = '';
+      notFoundList.innerHTML = '';
+      notFoundBox.style.display = 'none';
+      document.getElementById('resultsSection').style.display = 'block';
+
+      batchRecords = new Array(lines.length);
+      var completedCount = 0;
+
+      // Process up to 4 albums concurrently via our Cloudflare edge backend
+      var concurrency = 4;
+      var nextIndex = 0;
+
+      async function worker() {
+        while (nextIndex < lines.length) {
+          var currentIdx = nextIndex++;
+          var originalLine = lines[currentIdx];
+          var parsed = parseInputLine(originalLine);
+
+          var apiUrl = '/api/search?artist=' + encodeURIComponent(parsed.artist) +
+                       '&album=' + encodeURIComponent(parsed.album) +
+                       '&bandcamp=' + useBandcamp +
+                       '&platforms=' + usePlatforms;
+
+          try {
+            var res = await fetch(apiUrl);
+            var data = res.ok ? await res.json() : { status: 'Not Found' };
+
+            if (data.status === 'Found') {
+              batchRecords[currentIdx] = {
+                input: originalLine,
+                status: 'Found',
+                releaseType: data.releaseType,
+                matchedArtist: data.matchedArtist,
+                matchedTitle: data.matchedTitle,
+                source: data.source,
+                url: data.hiResUrl,
+                platforms: data.platforms,
+                rawResult: data
+              };
+            } else {
+              batchRecords[currentIdx] = {
+                input: originalLine,
+                status: 'Not Found',
+                releaseType: '',
+                matchedArtist: '',
+                matchedTitle: '',
+                source: '',
+                url: '',
+                platforms: {}
+              };
+            }
+          } catch (e) {
+            batchRecords[currentIdx] = {
+              input: originalLine,
+              status: 'Not Found',
+              releaseType: '',
+              matchedArtist: '',
+              matchedTitle: '',
+              source: '',
+              url: '',
+              platforms: {}
+            };
+          }
+
+          completedCount++;
+          status.textContent = 'Processed ' + completedCount + ' of ' + lines.length + '...';
+        }
+      }
+
+      var workers = [];
+      for (var w = 0; w < Math.min(concurrency, lines.length); w++) {
+        workers.push(worker());
+      }
+      await Promise.all(workers);
+
+      // Render all cards and Not Found items in exact original input order
+      var notFoundIndices = [];
+      for (var i = 0; i < batchRecords.length; i++) {
+        var rec = batchRecords[i];
+        if (rec.status === 'Found') {
+          renderCardElement(i, rec.rawResult, false);
+        } else {
+          notFoundIndices.push(i);
+        }
+      }
+
+      refreshOutputLinks();
+
+      if (notFoundIndices.length > 0) {
+        notFoundBox.style.display = 'block';
+        notFoundList.innerHTML = notFoundIndices.map(function(idx) {
+          var rec = batchRecords[idx];
+          var parsed = parseInputLine(rec.input);
+          var fullQuery = (parsed.artist + ' ' + parsed.album).trim();
+          var gSearchUrl = 'https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(fullQuery + ' album cover');
+          var bcSearchUrl = 'https://bandcamp.com/search?q=' + encodeURIComponent(fullQuery) + '&item_type=a';
+          var safeRaw = rec.input.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+          return '<li class="not-found-item" id="nf_item_' + idx + '">' +
+                   '<span class="not-found-label">' + safeRaw + '</span>' +
+                   '<span class="not-found-controls">' +
+                     '<a href="' + gSearchUrl + '" target="_blank" rel="noopener noreferrer" class="search-btn btn-google">Google Images</a>' +
+                     '<a href="' + bcSearchUrl + '" target="_blank" rel="noopener noreferrer" class="search-btn btn-bandcamp">Bandcamp</a>' +
+                     '<input type="text" id="manual_url_' + idx + '" class="manual-url-input" placeholder="Paste direct image URL...">' +
+                     '<button type="button" class="apply-url-btn" onclick="applyManualUrl(' + idx + ')">Add</button>' +
+                   '</span>' +
+                 '</li>';
+        }).join('');
+      }
+
+      status.textContent = 'Completed ' + lines.length + ' items.';
+      btn.disabled = false;
+    }
+  </script>
+</body>
+</html>
