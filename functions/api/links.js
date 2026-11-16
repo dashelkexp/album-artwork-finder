@@ -9,6 +9,11 @@ export async function onRequestGet(context) {
   const checkBandcamp = url.searchParams.get('bandcamp') !== 'false';
   const checkPlatforms = url.searchParams.get('platforms') !== 'false';
 
+  const cache = caches.default;
+  const cacheKey = new Request(url.toString(), request);
+  const cachedRes = await cache.match(cacheKey);
+  if (cachedRes) return cachedRes;
+
   const links = {
     appleMusic: appleMusicUrl ? appleMusicUrl.split('?')[0] : null,
     spotify: null,
@@ -17,7 +22,7 @@ export async function onRequestGet(context) {
     seedUrl: seedUrl ? seedUrl.split('?')[0] : null
   };
 
-  // 1. Ensure Apple Music / Seed URL via iTunes Search (album, then song fallback)
+  // 1. Ensure Apple Music / Seed URL via iTunes Search if not already provided
   if (!links.appleMusic || !links.seedUrl) {
     const itunesUrl = await findItunesAlbumUrl(artist, album);
     if (itunesUrl) {
@@ -26,13 +31,13 @@ export async function onRequestGet(context) {
     }
   }
 
-  // 2. If still no seedUrl, get Deezer album URL (Deezer never blocks cloud IPs)
+  // 2. Fallback to Deezer album URL if still no seedUrl
   if (!links.seedUrl) {
     const dzUrl = await findDeezerAlbumUrl(artist, album);
     if (dzUrl) links.seedUrl = dzUrl;
   }
 
-  // 3. Query MusicBrainz Release-Group & Release URL Relations for Bandcamp, Spotify, Tidal
+  // 3. Query MusicBrainz URL Relations for Bandcamp, Spotify, Tidal
   if (checkPlatforms || checkBandcamp) {
     const mbLinks = await fetchMusicBrainzRelations(artist, album);
     if (!links.appleMusic && mbLinks.appleMusic) links.appleMusic = mbLinks.appleMusic;
@@ -41,14 +46,20 @@ export async function onRequestGet(context) {
     if (!links.bandcamp && mbLinks.bandcamp) links.bandcamp = mbLinks.bandcamp;
   }
 
-  return new Response(JSON.stringify(links), {
+  const hasUsefulData = Boolean(links.appleMusic || links.spotify || links.tidal || links.bandcamp);
+  const response = new Response(JSON.stringify(links), {
     status: 200,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Access-Control-Allow-Origin': '*',
-      'Cache-Control': 'no-store'
+      'Cache-Control': hasUsefulData ? 'public, max-age=86400' : 'no-store'
     }
   });
+
+  if (hasUsefulData) {
+    context.waitUntil(cache.put(cacheKey, response.clone()));
+  }
+  return response;
 }
 
 function cleanString(str, stripLeadingThe = false) {
@@ -128,7 +139,7 @@ async function fetchMusicBrainzRelations(artist, album) {
     const q = `artist:"${artist}" AND releasegroup:"${album}"`;
     const headers = {
       'Accept': 'application/json',
-      'User-Agent': 'AlbumArtworkFinder/2.2 (contact@example.com)'
+      'User-Agent': 'AlbumArtworkFinder/2.3 (workplace-tool)'
     };
 
     const res = await fetch(`https://musicbrainz.org/ws/2/release-group/?query=${encodeURIComponent(q)}&fmt=json&limit=3`, { headers });
@@ -151,7 +162,6 @@ async function fetchMusicBrainzRelations(artist, album) {
           if (u.includes('music.apple.com') && !found.appleMusic) found.appleMusic = u;
         }
 
-        // Also check the primary release's URL relations (where streaming links are most often stored)
         if ((!found.spotify || !found.tidal || !found.bandcamp) && dData.releases && dData.releases.length > 0) {
           const relRes = await fetch(`https://musicbrainz.org/ws/2/release/${dData.releases[0].id}?inc=url-rels&fmt=json`, { headers });
           if (relRes.ok) {
