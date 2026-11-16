@@ -113,7 +113,7 @@
     
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
       gap: 18px;
     }
     .card {
@@ -201,84 +201,11 @@
     .badge.source { color: #cbd5e1; background: #334155; }
     .badge.release-type { color: #38bdf8; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.25); }
 
-    .platforms-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 5px;
-      margin-bottom: 8px;
-      padding-top: 8px;
-      border-top: 1px solid #1e293b;
+    .card-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
     }
-    .platform-pill {
-      display: block;
-      text-align: center;
-      font-size: 0.72rem;
-      font-weight: 600;
-      padding: 4px 6px;
-      border-radius: 4px;
-      text-decoration: none;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .platform-pill.loading {
-      background: #1e293b;
-      color: #64748b;
-      border: 1px dashed #334155;
-    }
-    .platform-pill.unavailable {
-      background: rgba(15, 23, 42, 0.6);
-      color: #475569;
-      border: 1px solid #1e293b;
-      cursor: default;
-    }
-    .platform-pill.available-apple {
-      background: rgba(250, 45, 72, 0.14);
-      color: #fb7185;
-      border: 1px solid rgba(250, 45, 72, 0.3);
-    }
-    .platform-pill.available-apple:hover { background: rgba(250, 45, 72, 0.25); color: #fff; }
-    
-    .platform-pill.available-spotify {
-      background: rgba(29, 185, 84, 0.14);
-      color: #4ade80;
-      border: 1px solid rgba(29, 185, 84, 0.3);
-    }
-    .platform-pill.available-spotify:hover { background: rgba(29, 185, 84, 0.25); color: #fff; }
-
-    .platform-pill.available-tidal {
-      background: rgba(226, 232, 240, 0.12);
-      color: #e2e8f0;
-      border: 1px solid rgba(226, 232, 240, 0.3);
-    }
-    .platform-pill.available-tidal:hover { background: rgba(226, 232, 240, 0.25); color: #fff; }
-
-    .platform-pill.available-bandcamp {
-      background: rgba(98, 153, 172, 0.16);
-      color: #7dd3fc;
-      border: 1px solid rgba(98, 153, 172, 0.35);
-    }
-    .platform-pill.available-bandcamp:hover { background: rgba(98, 153, 172, 0.3); color: #fff; }
-
-    .check-links-btn {
-      width: 100%;
-      background: rgba(56, 189, 248, 0.12);
-      color: #38bdf8;
-      border: 1px solid rgba(56, 189, 248, 0.3);
-      padding: 5px 8px;
-      border-radius: 4px;
-      font-size: 0.74rem;
-      font-weight: 600;
-      cursor: pointer;
-      margin-bottom: 8px;
-    }
-    .check-links-btn:hover { background: rgba(56, 189, 248, 0.25); color: #fff; }
-    .check-links-btn.rate-limited {
-      background: rgba(245, 158, 11, 0.14);
-      color: #fbbf24;
-      border-color: rgba(245, 158, 11, 0.35);
-    }
-
     .card a.primary-btn {
       display: block;
       text-align: center;
@@ -292,6 +219,20 @@
       border: 1px solid #334155;
     }
     .card a.primary-btn:hover { background: #334155; color: #fff; }
+
+    .card a.odesli-btn {
+      display: block;
+      text-align: center;
+      background: rgba(124, 58, 237, 0.16);
+      color: #c4b5fd;
+      text-decoration: none;
+      padding: 7px 10px;
+      border-radius: 5px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border: 1px solid rgba(124, 58, 237, 0.35);
+    }
+    .card a.odesli-btn:hover { background: rgba(124, 58, 237, 0.3); color: #fff; }
 
     .alternates-box {
       margin-top: 10px;
@@ -405,7 +346,7 @@
 <body>
   <div class="container">
     <h1>Multi-Source Album Artwork Finder</h1>
-    <p>Searches <strong>Apple Music / iTunes</strong>, <strong>Deezer</strong>, <strong>MusicBrainz / Cover Art Archive</strong>, and <strong>Bandcamp</strong>. Auto-resolves streaming links for batches up to 8 albums and supports on-demand link checks for larger lists.</p>
+    <p>Searches <strong>Apple Music / iTunes</strong>, <strong>Deezer</strong>, <strong>MusicBrainz / Cover Art Archive</strong>, and <strong>Bandcamp</strong>. Detects release format and generates instant <strong>All Platforms (Odesli)</strong> links.</p>
 
     <div class="input-wrapper">
       <textarea id="inputList" placeholder="Paste your list here (e.g. Artist - Album)..."></textarea>
@@ -419,10 +360,7 @@
       <button type="button" id="searchBtn" onclick="runBatch()">Search Covers</button>
       <button type="button" class="secondary" onclick="clearInput()">Clear</button>
       <label style="font-size: 0.82rem; color: #94a3b8; display: inline-flex; align-items: center; gap: 5px; margin-left: 6px;">
-        <input type="checkbox" id="enableBandcampProxy" checked> Auto-check Bandcamp
-      </label>
-      <label style="font-size: 0.82rem; color: #94a3b8; display: inline-flex; align-items: center; gap: 5px; margin-left: 6px;">
-        <input type="checkbox" id="enablePlatformLinks" checked> Resolve streaming links (auto for &le; 8 items)
+        <input type="checkbox" id="enableBandcampProxy" checked> Include Bandcamp fallback
       </label>
       <span id="status"></span>
     </div>
@@ -458,13 +396,6 @@
 
   <script>
     var batchRecords = [];
-    var AUTO_ODESLI_BATCH_LIMIT = 8;
-
-    function sleep(ms) {
-      return new Promise(function(resolve) {
-        setTimeout(resolve, ms);
-      });
-    }
 
     function clearInput() {
       var inputEl = document.getElementById('inputList');
@@ -541,6 +472,33 @@
       return { artist: normalized.trim(), album: '' };
     }
 
+    // Build instant Odesli page URL with zero API calls or rate limits
+    function buildOdesliPageUrl(seedUrl, artist, album) {
+      if (seedUrl) {
+        // Apple Music URL -> extract numeric collection ID
+        if (seedUrl.indexOf('music.apple.com') !== -1) {
+          var appleMatch = seedUrl.split('?')[0].match(/\/(\d+)(?:\/)?$/);
+          if (appleMatch && appleMatch[1]) {
+            return 'https://album.link/i/' + appleMatch[1];
+          }
+        }
+        // Deezer URL -> extract numeric album ID
+        if (seedUrl.indexOf('deezer.com') !== -1) {
+          var dzMatch = seedUrl.split('?')[0].match(/\/album\/(\d+)/);
+          if (dzMatch && dzMatch[1]) {
+            return 'https://album.link/d/' + dzMatch[1];
+          }
+        }
+        // Bandcamp or other direct URL -> pass directly to Odesli
+        if (seedUrl.indexOf('http') === 0) {
+          return 'https://odesli.co/' + encodeURIComponent(seedUrl);
+        }
+      }
+      // Fallback: direct Odesli search query
+      var q = ((artist || '') + ' ' + (album || '')).trim();
+      return 'https://odesli.co/?q=' + encodeURIComponent(q);
+    }
+
     function refreshOutputLinks() {
       var lines = batchRecords.map(function(rec) {
         if (rec.status === 'Found') {
@@ -551,40 +509,7 @@
       document.getElementById('outputLinks').value = lines.join('\n');
     }
 
-    function buildPlatformPillsHtml(links, checkedStreaming, checkedBandcamp, odesliState) {
-      function makePill(label, url, availClass, unavailText) {
-        if (url) {
-          return '<a href="' + url + '" target="_blank" rel="noopener noreferrer" class="platform-pill ' + availClass + '">' + label + ' &#8599;</a>';
-        }
-        return '<span class="platform-pill unavailable">' + unavailText + '</span>';
-      }
-
-      var appleHtml = makePill('Apple Music', links.appleMusic, 'available-apple', 'No Apple Music');
-      
-      var spotifyHtml = '';
-      var tidalHtml = '';
-      if (!checkedStreaming) {
-        spotifyHtml = '<span class="platform-pill unavailable">Spotify Skipped</span>';
-        tidalHtml = '<span class="platform-pill unavailable">Tidal Skipped</span>';
-      } else if (odesliState === 'deferred') {
-        spotifyHtml = makePill('Spotify', links.spotify, 'available-spotify', 'Spotify Pending');
-        tidalHtml = makePill('Tidal', links.tidal, 'available-tidal', 'Tidal Pending');
-      } else if (odesliState === 'rate_limited') {
-        spotifyHtml = makePill('Spotify', links.spotify, 'available-spotify', 'Spotify Rate-Limited');
-        tidalHtml = makePill('Tidal', links.tidal, 'available-tidal', 'Tidal Rate-Limited');
-      } else {
-        spotifyHtml = makePill('Spotify', links.spotify, 'available-spotify', 'No Spotify');
-        tidalHtml = makePill('Tidal', links.tidal, 'available-tidal', 'No Tidal');
-      }
-
-      var bcHtml = (checkedBandcamp || links.bandcamp)
-        ? makePill('Bandcamp', links.bandcamp, 'available-bandcamp', 'No Bandcamp')
-        : '<span class="platform-pill unavailable">Bandcamp Skipped</span>';
-
-      return appleHtml + spotifyHtml + tidalHtml + bcHtml;
-    }
-
-    function renderCardElement(recIndex, data, isManual, isLargeBatch) {
+    function renderCardElement(recIndex, data, isManual) {
       var grid = document.getElementById('cardGrid');
       var card = document.createElement('div');
       card.id = 'card_' + recIndex;
@@ -614,22 +539,7 @@
       var safeInputDisplay = rawInput.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       var badgeClass = isManual ? 'manual' : (data.isHighConfidence ? 'high' : 'review');
       var badgeText = isManual ? 'Manual' : (data.isHighConfidence ? 'Matched' : 'Review');
-
-      var initialApple = data.appleMusicUrl
-        ? '<a href="' + data.appleMusicUrl + '" target="_blank" rel="noopener noreferrer" class="platform-pill available-apple">Apple Music &#8599;</a>'
-        : '<span class="platform-pill loading">Checking Apple...</span>';
-      var initialBc = data.bandcampPageUrl
-        ? '<a href="' + data.bandcampPageUrl + '" target="_blank" rel="noopener noreferrer" class="platform-pill available-bandcamp">Bandcamp &#8599;</a>'
-        : '<span class="platform-pill loading">Checking Bandcamp...</span>';
-
-      var spotifyInit = isLargeBatch
-        ? '<span class="platform-pill unavailable">Spotify Pending</span>'
-        : '<span class="platform-pill loading">Checking Spotify...</span>';
-      var tidalInit = isLargeBatch
-        ? '<span class="platform-pill unavailable">Tidal Pending</span>'
-        : '<span class="platform-pill loading">Checking Tidal...</span>';
-
-      var actionBtnHtml = '<button type="button" id="check_links_btn_' + recIndex + '" class="check-links-btn" style="display:' + (isLargeBatch ? 'block' : 'none') + ';" onclick="manualCheckLinks(' + recIndex + ')">Check Spotify &amp; Tidal Links</button>';
+      var odesliUrl = batchRecords[recIndex].odesliUrl;
 
       card.innerHTML = 
         '<div class="img-wrapper">' +
@@ -646,130 +556,13 @@
             '<div class="card-title" title="' + (data.matchedTitle || '') + '">' + (data.matchedTitle || '') + '</div>' +
             '<div class="card-artist" title="' + (data.matchedArtist || '') + '">' + (data.matchedArtist || '') + '</div>' +
           '</div>' +
-          '<div>' +
-            '<div class="platforms-grid" id="platforms_' + recIndex + '">' +
-              initialApple +
-              spotifyInit +
-              tidalInit +
-              initialBc +
-            '</div>' +
-            actionBtnHtml +
+          '<div class="card-actions">' +
+            '<a href="' + odesliUrl + '" target="_blank" rel="noopener noreferrer" id="odesli_btn_' + recIndex + '" class="odesli-btn">All Platforms (Odesli) &#8599;</a>' +
             '<a href="' + data.hiResUrl + '" target="_blank" rel="noopener noreferrer" class="primary-btn">Open Image</a>' +
-            alternatesHtml +
           '</div>' +
+          alternatesHtml +
         '</div>';
       grid.appendChild(card);
-    }
-
-    async function queryOdesliClientSide(seedUrl) {
-      if (!seedUrl) return { status: 'no_seed' };
-      try {
-        var res = await fetch('https://api.song.link/v1-alpha.1/links?url=' + encodeURIComponent(seedUrl) + '&userCountry=US');
-        if (res.status === 429) {
-          return { status: 'rate_limited' };
-        }
-        if (!res.ok) {
-          return { status: 'error' };
-        }
-        var data = await res.json();
-        var byPlat = data.linksByPlatform || {};
-        return {
-          status: 'ok',
-          appleMusic: byPlat.appleMusic ? byPlat.appleMusic.url : null,
-          spotify: byPlat.spotify ? byPlat.spotify.url : null,
-          tidal: byPlat.tidal ? byPlat.tidal.url : null
-        };
-      } catch (e) {
-        return { status: 'error' };
-      }
-    }
-
-    async function manualCheckLinks(recIndex) {
-      var btn = document.getElementById('check_links_btn_' + recIndex);
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Checking Spotify & Tidal...';
-      }
-      await resolveLinksForCard(recIndex, true);
-    }
-
-    async function resolveLinksForCard(recIndex, runOdesliNow) {
-      var rec = batchRecords[recIndex];
-      if (!rec || rec.status !== 'Found') return;
-
-      var checkPlatforms = document.getElementById('enablePlatformLinks').checked;
-      var checkBandcamp = document.getElementById('enableBandcampProxy').checked;
-
-      var apiUrl = '/api/links?artist=' + encodeURIComponent(rec.matchedArtist) +
-                   '&album=' + encodeURIComponent(rec.matchedTitle) +
-                   '&seed=' + encodeURIComponent(rec.seedPlatformUrl || '') +
-                   '&apple=' + encodeURIComponent(rec.platforms.appleMusic || '') +
-                   '&bandcampUrl=' + encodeURIComponent(rec.platforms.bandcamp || '') +
-                   '&bandcamp=' + checkBandcamp +
-                   '&platforms=' + checkPlatforms;
-
-      // Start with existing preserved links so we NEVER overwrite a known Apple Music link with null
-      var links = {
-        appleMusic: rec.platforms.appleMusic || null,
-        spotify: rec.platforms.spotify || null,
-        tidal: rec.platforms.tidal || null,
-        bandcamp: rec.platforms.bandcamp || null,
-        seedUrl: rec.seedPlatformUrl || null
-      };
-
-      try {
-        var res = await fetch(apiUrl);
-        if (res.ok) {
-          var serverLinks = await res.json();
-          if (serverLinks.appleMusic) links.appleMusic = serverLinks.appleMusic;
-          if (serverLinks.spotify) links.spotify = serverLinks.spotify;
-          if (serverLinks.tidal) links.tidal = serverLinks.tidal;
-          if (serverLinks.bandcamp) links.bandcamp = serverLinks.bandcamp;
-          if (serverLinks.seedUrl) links.seedUrl = serverLinks.seedUrl;
-        }
-      } catch (e) {}
-
-      var odesliState = 'complete';
-      var actionBtn = document.getElementById('check_links_btn_' + recIndex);
-
-      if (checkPlatforms && (!links.spotify || !links.tidal)) {
-        if (!runOdesliNow) {
-          odesliState = 'deferred';
-          if (actionBtn) {
-            actionBtn.style.display = 'block';
-            actionBtn.disabled = false;
-            actionBtn.textContent = 'Check Spotify & Tidal Links';
-          }
-        } else if (links.seedUrl) {
-          var clientOdesli = await queryOdesliClientSide(links.seedUrl);
-          if (clientOdesli.status === 'rate_limited') {
-            odesliState = 'rate_limited';
-            if (actionBtn) {
-              actionBtn.style.display = 'block';
-              actionBtn.disabled = false;
-              actionBtn.classList.add('rate-limited');
-              actionBtn.textContent = 'Rate-Limited by Odesli — Retry in ~45s';
-            }
-          } else {
-            if (clientOdesli.status === 'ok') {
-              if (!links.appleMusic && clientOdesli.appleMusic) links.appleMusic = clientOdesli.appleMusic;
-              if (!links.spotify && clientOdesli.spotify) links.spotify = clientOdesli.spotify;
-              if (!links.tidal && clientOdesli.tidal) links.tidal = clientOdesli.tidal;
-            }
-            if (actionBtn) {
-              actionBtn.style.display = 'none';
-            }
-          }
-        }
-      } else if (actionBtn) {
-        actionBtn.style.display = 'none';
-      }
-
-      rec.platforms = links;
-      var platGrid = document.getElementById('platforms_' + recIndex);
-      if (platGrid) {
-        platGrid.innerHTML = buildPlatformPillsHtml(links, checkPlatforms, checkBandcamp, odesliState);
-      }
     }
 
     function applyManualUrl(recIndex) {
@@ -790,7 +583,7 @@
       rec.releaseType = 'Album';
       rec.source = 'Manual Paste';
       rec.url = url;
-      rec.platforms = { appleMusic: null, spotify: null, tidal: null, bandcamp: null };
+      rec.odesliUrl = buildOdesliPageUrl('', rec.matchedArtist, rec.matchedTitle);
 
       refreshOutputLinks();
 
@@ -810,9 +603,7 @@
         source: 'Manual Paste',
         isHighConfidence: true,
         hiResUrl: url
-      }, true, false);
-
-      resolveLinksForCard(recIndex, true);
+      }, true);
     }
 
     function selectAlternate(recordIndex, altIdx, newUrl, newTitle, newArtist, newRelType, newAppleUrl) {
@@ -826,6 +617,12 @@
       card.querySelector('.card-artist').textContent = newArtist;
       card.querySelector('.card-artist').title = newArtist;
       card.querySelector('.primary-btn').href = newUrl;
+
+      var newOdesliUrl = buildOdesliPageUrl(newAppleUrl, newArtist, newTitle);
+      var odesliBtn = document.getElementById('odesli_btn_' + recordIndex);
+      if (odesliBtn) {
+        odesliBtn.href = newOdesliUrl;
+      }
 
       var relBadge = document.getElementById('reltype_' + recordIndex);
       if (relBadge && newRelType) {
@@ -843,19 +640,8 @@
         batchRecords[recordIndex].matchedArtist = newArtist;
         batchRecords[recordIndex].releaseType = newRelType || batchRecords[recordIndex].releaseType;
         batchRecords[recordIndex].url = newUrl;
-        batchRecords[recordIndex].seedPlatformUrl = newAppleUrl || '';
-        batchRecords[recordIndex].platforms = { appleMusic: newAppleUrl || null, spotify: null, tidal: null, bandcamp: null };
+        batchRecords[recordIndex].odesliUrl = newOdesliUrl;
         refreshOutputLinks();
-
-        var platGrid = document.getElementById('platforms_' + recordIndex);
-        if (platGrid) {
-          platGrid.innerHTML =
-            '<span class="platform-pill loading">Checking Apple...</span>' +
-            '<span class="platform-pill loading">Checking Spotify...</span>' +
-            '<span class="platform-pill loading">Checking Tidal...</span>' +
-            '<span class="platform-pill loading">Checking Bandcamp...</span>';
-        }
-        resolveLinksForCard(recordIndex, true);
       }
     }
 
@@ -884,15 +670,11 @@
         'Matched Album',
         'Source',
         'Image URL',
-        'Apple Music URL',
-        'Spotify URL',
-        'Tidal URL',
-        'Bandcamp URL'
+        'Odesli All Platforms URL'
       ];
       var csvRows = [headers.join(',')];
 
       batchRecords.forEach(function(rec) {
-        var p = rec.platforms || {};
         var row = [
           rec.input,
           rec.status,
@@ -901,10 +683,7 @@
           rec.matchedTitle || '',
           rec.source || '',
           rec.url || '',
-          p.appleMusic || 'Not Available',
-          p.spotify || 'Not Available',
-          p.tidal || 'Not Available',
-          p.bandcamp || 'Not Available'
+          rec.odesliUrl || ''
         ].map(function(val) {
           return '"' + String(val).replace(/"/g, '""') + '"';
         });
@@ -1085,6 +864,9 @@
             var data = res.ok ? await res.json() : { status: 'Not Found' };
 
             if (data.status === 'Found') {
+              var seed = data.appleMusicUrl || data.seedPlatformUrl || data.bandcampPageUrl || '';
+              var odesliUrl = buildOdesliPageUrl(seed, data.matchedArtist, data.matchedTitle);
+
               batchRecords[currentIdx] = {
                 input: originalLine,
                 status: 'Found',
@@ -1093,13 +875,7 @@
                 matchedTitle: data.matchedTitle,
                 source: data.source,
                 url: data.hiResUrl,
-                seedPlatformUrl: data.seedPlatformUrl || '',
-                platforms: {
-                  appleMusic: data.appleMusicUrl || null,
-                  spotify: null,
-                  tidal: null,
-                  bandcamp: data.bandcampPageUrl || null
-                },
+                odesliUrl: odesliUrl,
                 rawResult: data
               };
             } else {
@@ -1111,7 +887,7 @@
                 matchedTitle: '',
                 source: '',
                 url: '',
-                platforms: {}
+                odesliUrl: ''
               };
             }
           } catch (e) {
@@ -1123,12 +899,12 @@
               matchedTitle: '',
               source: '',
               url: '',
-              platforms: {}
+              odesliUrl: ''
             };
           }
 
           completedCount++;
-          status.textContent = 'Finding covers: ' + completedCount + ' of ' + lines.length + '...';
+          status.textContent = 'Searching ' + completedCount + ' of ' + lines.length + '...';
         }
       }
 
@@ -1138,15 +914,11 @@
       }
       await Promise.all(workers);
 
-      var foundIndices = [];
       var notFoundIndices = [];
-      var isLargeBatch = lines.length > AUTO_ODESLI_BATCH_LIMIT;
-
       for (var i = 0; i < batchRecords.length; i++) {
         var rec = batchRecords[i];
         if (rec.status === 'Found') {
-          renderCardElement(i, rec.rawResult, false, isLargeBatch);
-          foundIndices.push(i);
+          renderCardElement(i, rec.rawResult, false);
         } else {
           notFoundIndices.push(i);
         }
@@ -1176,22 +948,8 @@
         }).join('');
       }
 
+      status.textContent = 'Completed ' + lines.length + ' items.';
       btn.disabled = false;
-
-      if (isLargeBatch) {
-        status.textContent = 'Completed ' + lines.length + ' items (Apple Music & Bandcamp resolved; click "Check Spotify & Tidal Links" on individual cards to avoid rate limits).';
-        for (var k = 0; k < foundIndices.length; k++) {
-          await resolveLinksForCard(foundIndices[k], false);
-          if (k < foundIndices.length - 1) await sleep(1100);
-        }
-      } else {
-        status.textContent = 'Resolving streaming links for ' + foundIndices.length + ' albums...';
-        for (var j = 0; j < foundIndices.length; j++) {
-          await resolveLinksForCard(foundIndices[j], true);
-          if (j < foundIndices.length - 1) await sleep(1200);
-        }
-        status.textContent = 'Completed ' + lines.length + ' items.';
-      }
     }
   </script>
 </body>
