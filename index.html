@@ -221,6 +221,11 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .platform-pill.loading {
+      background: #1e293b;
+      color: #64748b;
+      border: 1px dashed #334155;
+    }
     .platform-pill.unavailable {
       background: rgba(15, 23, 42, 0.6);
       color: #475569;
@@ -435,6 +440,12 @@
   <script>
     var batchRecords = [];
 
+    function sleep(ms) {
+      return new Promise(function(resolve) {
+        setTimeout(resolve, ms);
+      });
+    }
+
     function clearInput() {
       var inputEl = document.getElementById('inputList');
       inputEl.value = '';
@@ -573,9 +584,12 @@
       var badgeClass = isManual ? 'manual' : (data.isHighConfidence ? 'high' : 'review');
       var badgeText = isManual ? 'Manual' : (data.isHighConfidence ? 'Matched' : 'Review');
 
-      var checkedStreaming = document.getElementById('enablePlatformLinks').checked;
-      var checkedBandcamp = document.getElementById('enableBandcampProxy').checked;
-      var platformsHtml = buildPlatformPillsHtml(data.platforms || {}, checkedStreaming, checkedBandcamp);
+      var initialApple = data.appleMusicUrl
+        ? '<a href="' + data.appleMusicUrl + '" target="_blank" rel="noopener noreferrer" class="platform-pill available-apple">Apple Music &#8599;</a>'
+        : '<span class="platform-pill loading">Checking Apple...</span>';
+      var initialBc = data.bandcampPageUrl
+        ? '<a href="' + data.bandcampPageUrl + '" target="_blank" rel="noopener noreferrer" class="platform-pill available-bandcamp">Bandcamp &#8599;</a>'
+        : '<span class="platform-pill loading">Checking Bandcamp...</span>';
 
       card.innerHTML = 
         '<div class="img-wrapper">' +
@@ -593,12 +607,45 @@
             '<div class="card-artist" title="' + (data.matchedArtist || '') + '">' + (data.matchedArtist || '') + '</div>' +
           '</div>' +
           '<div>' +
-            '<div class="platforms-grid" id="platforms_' + recIndex + '">' + platformsHtml + '</div>' +
+            '<div class="platforms-grid" id="platforms_' + recIndex + '">' +
+              initialApple +
+              '<span class="platform-pill loading">Checking Spotify...</span>' +
+              '<span class="platform-pill loading">Checking Tidal...</span>' +
+              initialBc +
+            '</div>' +
             '<a href="' + data.hiResUrl + '" target="_blank" rel="noopener noreferrer" class="primary-btn">Open Image</a>' +
             alternatesHtml +
           '</div>' +
         '</div>';
       grid.appendChild(card);
+    }
+
+    async function resolveLinksForCard(recIndex) {
+      var rec = batchRecords[recIndex];
+      if (!rec || rec.status !== 'Found') return;
+
+      var checkPlatforms = document.getElementById('enablePlatformLinks').checked;
+      var checkBandcamp = document.getElementById('enableBandcampProxy').checked;
+
+      var apiUrl = '/api/links?artist=' + encodeURIComponent(rec.matchedArtist) +
+                   '&album=' + encodeURIComponent(rec.matchedTitle) +
+                   '&seed=' + encodeURIComponent(rec.seedPlatformUrl || '') +
+                   '&apple=' + encodeURIComponent(rec.platforms.appleMusic || '') +
+                   '&bandcampUrl=' + encodeURIComponent(rec.platforms.bandcamp || '') +
+                   '&bandcamp=' + checkBandcamp +
+                   '&platforms=' + checkPlatforms;
+
+      try {
+        var res = await fetch(apiUrl);
+        if (res.ok) {
+          var links = await res.json();
+          rec.platforms = links;
+          var platGrid = document.getElementById('platforms_' + recIndex);
+          if (platGrid) {
+            platGrid.innerHTML = buildPlatformPillsHtml(links, checkPlatforms, checkBandcamp);
+          }
+        }
+      } catch (e) {}
     }
 
     function applyManualUrl(recIndex) {
@@ -638,12 +685,13 @@
         releaseType: 'Album',
         source: 'Manual Paste',
         isHighConfidence: true,
-        hiResUrl: url,
-        platforms: rec.platforms
+        hiResUrl: url
       }, true);
+
+      resolveLinksForCard(recIndex);
     }
 
-    async function selectAlternate(recordIndex, altIdx, newUrl, newTitle, newArtist, newRelType, newAppleUrl) {
+    function selectAlternate(recordIndex, altIdx, newUrl, newTitle, newArtist, newRelType, newAppleUrl) {
       var card = document.getElementById('card_' + recordIndex);
       if (!card) return;
       
@@ -671,28 +719,19 @@
         batchRecords[recordIndex].matchedArtist = newArtist;
         batchRecords[recordIndex].releaseType = newRelType || batchRecords[recordIndex].releaseType;
         batchRecords[recordIndex].url = newUrl;
+        batchRecords[recordIndex].seedPlatformUrl = newAppleUrl || '';
+        batchRecords[recordIndex].platforms = { appleMusic: newAppleUrl || null, spotify: null, tidal: null, bandcamp: null };
         refreshOutputLinks();
 
-        // Re-fetch platform links for the newly selected edition via backend API
-        var checkPlatforms = document.getElementById('enablePlatformLinks').checked;
-        var checkBandcamp = document.getElementById('enableBandcampProxy').checked;
-        var apiUrl = '/api/search?artist=' + encodeURIComponent(newArtist) +
-                     '&album=' + encodeURIComponent(newTitle) +
-                     '&bandcamp=' + checkBandcamp +
-                     '&platforms=' + checkPlatforms;
-        try {
-          var res = await fetch(apiUrl);
-          if (res.ok) {
-            var updated = await res.json();
-            if (updated.platforms) {
-              batchRecords[recordIndex].platforms = updated.platforms;
-              var platGrid = document.getElementById('platforms_' + recordIndex);
-              if (platGrid) {
-                platGrid.innerHTML = buildPlatformPillsHtml(updated.platforms, checkPlatforms, checkBandcamp);
-              }
-            }
-          }
-        } catch (e) {}
+        var platGrid = document.getElementById('platforms_' + recordIndex);
+        if (platGrid) {
+          platGrid.innerHTML =
+            '<span class="platform-pill loading">Checking Apple...</span>' +
+            '<span class="platform-pill loading">Checking Spotify...</span>' +
+            '<span class="platform-pill loading">Checking Tidal...</span>' +
+            '<span class="platform-pill loading">Checking Bandcamp...</span>';
+        }
+        resolveLinksForCard(recordIndex);
       }
     }
 
@@ -768,7 +807,6 @@
 
     function fetchAndProcessImageBlob(url, formatMode) {
       return new Promise(function(resolve) {
-        // Use our own Cloudflare /api/image proxy to guarantee CORS-clean binary retrieval
         var proxyUrl = '/api/image?url=' + encodeURIComponent(url);
         fetch(proxyUrl)
           .then(function(res) {
@@ -894,7 +932,6 @@
       var notFoundBox = document.getElementById('notFoundBox');
       var notFoundList = document.getElementById('notFoundList');
       var useBandcamp = document.getElementById('enableBandcampProxy').checked;
-      var usePlatforms = document.getElementById('enablePlatformLinks').checked;
 
       btn.disabled = true;
       grid.innerHTML = '';
@@ -906,11 +943,10 @@
       batchRecords = new Array(lines.length);
       var completedCount = 0;
 
-      // Process up to 4 albums concurrently via our Cloudflare edge backend
       var concurrency = 4;
       var nextIndex = 0;
 
-      async function worker() {
+      async function searchWorker() {
         while (nextIndex < lines.length) {
           var currentIdx = nextIndex++;
           var originalLine = lines[currentIdx];
@@ -918,8 +954,7 @@
 
           var apiUrl = '/api/search?artist=' + encodeURIComponent(parsed.artist) +
                        '&album=' + encodeURIComponent(parsed.album) +
-                       '&bandcamp=' + useBandcamp +
-                       '&platforms=' + usePlatforms;
+                       '&bandcamp=' + useBandcamp;
 
           try {
             var res = await fetch(apiUrl);
@@ -934,7 +969,13 @@
                 matchedTitle: data.matchedTitle,
                 source: data.source,
                 url: data.hiResUrl,
-                platforms: data.platforms,
+                seedPlatformUrl: data.seedPlatformUrl || '',
+                platforms: {
+                  appleMusic: data.appleMusicUrl || null,
+                  spotify: null,
+                  tidal: null,
+                  bandcamp: data.bandcampPageUrl || null
+                },
                 rawResult: data
               };
             } else {
@@ -963,22 +1004,23 @@
           }
 
           completedCount++;
-          status.textContent = 'Processed ' + completedCount + ' of ' + lines.length + '...';
+          status.textContent = 'Finding covers: ' + completedCount + ' of ' + lines.length + '...';
         }
       }
 
       var workers = [];
       for (var w = 0; w < Math.min(concurrency, lines.length); w++) {
-        workers.push(worker());
+        workers.push(searchWorker());
       }
       await Promise.all(workers);
 
-      // Render all cards and Not Found items in exact original input order
+      var foundIndices = [];
       var notFoundIndices = [];
       for (var i = 0; i < batchRecords.length; i++) {
         var rec = batchRecords[i];
         if (rec.status === 'Found') {
           renderCardElement(i, rec.rawResult, false);
+          foundIndices.push(i);
         } else {
           notFoundIndices.push(i);
         }
@@ -1008,8 +1050,25 @@
         }).join('');
       }
 
-      status.textContent = 'Completed ' + lines.length + ' items.';
+      // Phase 2: Resolve streaming platform links cleanly via /api/links (2 concurrent workers + 300ms pacing)
+      status.textContent = 'Resolving streaming links for ' + foundIndices.length + ' albums...';
       btn.disabled = false;
+
+      var linkPtr = 0;
+      async function linkWorker() {
+        while (linkPtr < foundIndices.length) {
+          var idx = foundIndices[linkPtr++];
+          await resolveLinksForCard(idx);
+          await sleep(300);
+        }
+      }
+
+      var linkWorkers = [];
+      for (var lw = 0; lw < Math.min(2, foundIndices.length); lw++) {
+        linkWorkers.push(linkWorker());
+      }
+      await Promise.all(linkWorkers);
+      status.textContent = 'Completed ' + lines.length + ' items.';
     }
   </script>
 </body>
