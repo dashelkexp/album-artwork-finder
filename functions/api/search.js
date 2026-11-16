@@ -4,26 +4,23 @@ export async function onRequestGet(context) {
   const artist = (url.searchParams.get('artist') || '').trim();
   const album = (url.searchParams.get('album') || '').trim();
   const checkBandcamp = url.searchParams.get('bandcamp') !== 'false';
-  const checkPlatforms = url.searchParams.get('platforms') !== 'false';
 
   if (!artist && !album) {
     return jsonResponse({ error: 'Missing artist or album parameter' }, 400);
   }
 
-  // Edge Cache check (caches identical queries for 24 hours)
   const cache = caches.default;
   const cacheKey = new Request(url.toString(), request);
   const cachedRes = await cache.match(cacheKey);
-  if (cachedRes) {
-    return cachedRes;
+  if (cachedRes) return cachedRes;
+
+  const result = await resolveRelease({ artist, album, checkBandcamp });
+  const cacheHeader = result.status === 'Found' ? 'public, max-age=86400' : 'no-store';
+  const response = jsonResponse(result, 200, { 'Cache-Control': cacheHeader });
+
+  if (result.status === 'Found') {
+    context.waitUntil(cache.put(cacheKey, response.clone()));
   }
-
-  const result = await resolveRelease({ artist, album, checkBandcamp, checkPlatforms });
-  const response = jsonResponse(result, 200, {
-    'Cache-Control': 'public, max-age=86400'
-  });
-
-  context.waitUntil(cache.put(cacheKey, response.clone()));
   return response;
 }
 
@@ -37,8 +34,6 @@ function jsonResponse(data, status = 200, extraHeaders = {}) {
     }
   });
 }
-
-// --- String Normalization & Scoring Helpers ---
 
 function cleanString(str, stripLeadingThe = false) {
   let s = (str || '')
@@ -136,7 +131,6 @@ function scoreItemMatch(item, targetArtist, targetAlbum, isSongSearch, hasFullAl
   const itemAlbum = cleanString(item.collectionName, false);
   const itemTrack = cleanString(item.trackName, false);
 
-  // Handle generic "Artist - Single" or "Artist - EP" inputs
   const isGenericFormatQuery = targetAlb === 'single' || targetAlb === 'ep';
   const comparisonTitle = (isSongSearch && itemTrack) ? itemTrack : itemAlbum;
 
@@ -176,11 +170,9 @@ function scoreItemMatch(item, targetArtist, targetAlbum, isSongSearch, hasFullAl
   return score;
 }
 
-// --- Data Source Fetchers (Server-to-Server, No CORS) ---
-
-async function queryItunes(query, entity = 'album') {
+async function queryItunes(query, entity = 'album', country = 'us') {
   try {
-    const url = `https://itunes.apple.com/search?media=music&entity=${entity}&limit=15&term=${encodeURIComponent(query)}`;
+    const url = `https://itunes.apple.com/search?media=music&entity=${entity}&country=${country}&limit=15&term=${encodeURIComponent(query)}`;
     const res = await fetch(url);
     if (!res.ok) return [];
     const data = await res.json();
@@ -226,7 +218,7 @@ async function queryDeezer(artist, album) {
 
 async function fetchCaaFrontImage(endpointUrl) {
   try {
-    const res = await fetch(endpointUrl, { headers: { 'User-Agent': 'AlbumArtworkFinder/2.0' } });
+    const res = await fetch(endpointUrl, { headers: { 'User-Agent': 'AlbumArtworkFinder/2.1' } });
     if (!res.ok) return null;
     const data = await res.json();
     const front = (data.images || []).find(img => img.front);
@@ -247,7 +239,7 @@ async function queryMusicBrainz(artist, album) {
     const cleanAlb = cleanString(album, false);
     const headers = {
       'Accept': 'application/json',
-      'User-Agent': 'AlbumArtworkFinder/2.0 (internal-workplace-tool)'
+      'User-Agent': 'AlbumArtworkFinder/2.1 (internal-workplace-tool)'
     };
 
     const queries = [
@@ -296,16 +288,15 @@ async function queryBandcamp(artist, album) {
   try {
     const cleanArt = cleanString(artist, true);
     const cleanAlb = cleanString(album, false);
-    const bcSearchUrl = `https://bandcamp.com/search?q=${encodeURIComponent(`${artist}${album}`)}`;
+    const bcSearchUrl = `https://bandcamp.com/search?q=${encodeURIComponent(`${artist} ${album}`)}`;
     const res = await fetch(bcSearchUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; AlbumArtworkFinder/2.0)'
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
       }
     });
     if (!res.ok) return null;
     const html = await res.text();
 
-    // Lightweight regex extraction from Bandcamp search result cards
     const resultBlocks = html.split('<li class="searchresult');
     for (let i = 1; i < resultBlocks.length; i++) {
       const block = resultBlocks[i];
@@ -342,71 +333,15 @@ async function queryBandcamp(artist, album) {
   }
 }
 
-async function resolveOdesliLinks(seedUrl) {
-  if (!seedUrl) return { appleMusic: null, spotify: null, tidal: null };
-  try {
-    const cleanSeed = normalizeAppleAlbumUrl(seedUrl);
-    const apiEndpoint = `https://api.song.link/v1-alpha.1/links?url=${encodeURIComponent(cleanSeed)}&userCountry=US`;
-    const res = await fetch(apiEndpoint);
-    if (!res.ok) return { appleMusic: null, spotify: null, tidal: null };
-    const data = await res.json();
-    const links = data.linksByPlatform || {};
-    return {
-      appleMusic: links.appleMusic ? links.appleMusic.url : null,
-      spotify: links.spotify ? links.spotify.url : null,
-      tidal: links.tidal ? links.tidal.url : null
-    };
-  } catch (e) {
-    return { appleMusic: null, spotify: null, tidal: null };
-  }
-}
-
-async function fetchMusicBrainzExternalLinks(artist, album) {
-  const found = { appleMusic: null, spotify: null, tidal: null, bandcamp: null };
-  try {
-    const cleanArt = cleanString(artist, true);
-    const cleanAlb = cleanString(album, false);
-    const q = `artist:"${artist}" AND releasegroup:"${album}"`;
-    const rgUrl = `https://musicbrainz.org/ws/2/release-group/?query=${encodeURIComponent(q)}&fmt=json&limit=3`;
-    const headers = { 'Accept': 'application/json', 'User-Agent': 'AlbumArtworkFinder/2.0' };
-
-    const res = await fetch(rgUrl, { headers });
-    if (!res.ok) return found;
-    const data = await res.json();
-    const groups = data['release-groups'] || [];
-
-    for (const rg of groups) {
-      const rgArtist = cleanString((rg['artist-credit'] && rg['artist-credit'][0]) ? rg['artist-credit'][0].name : '', true);
-      const rgTitle = cleanString(rg.title || '', false);
-      if (evaluateArtistMatch(rgArtist, cleanArt) > 0 && hasWordOverlap(cleanAlb, rgTitle)) {
-        const detailRes = await fetch(`https://musicbrainz.org/ws/2/release-group/${rg.id}?inc=url-rels&fmt=json`, { headers });
-        if (!detailRes.ok) break;
-        const detailData = await detailRes.json();
-        for (const rel of (detailData.relations || [])) {
-          const relUrl = (rel.url && rel.url.resource) ? rel.url.resource : '';
-          if (relUrl.includes('bandcamp.com') && !found.bandcamp) found.bandcamp = relUrl;
-          if (relUrl.includes('open.spotify.com') && !found.spotify) found.spotify = relUrl;
-          if (relUrl.includes('tidal.com') && !found.tidal) found.tidal = relUrl;
-          if (relUrl.includes('music.apple.com') && !found.appleMusic) found.appleMusic = relUrl;
-        }
-        break;
-      }
-    }
-  } catch (e) {}
-  return found;
-}
-
-// --- Main Resolution Pipeline ---
-
-async function resolveRelease({ artist, album, checkBandcamp, checkPlatforms }) {
+async function resolveRelease({ artist, album, checkBandcamp }) {
   const isGenericFormat = ['single', 'ep'].includes(cleanString(album, false));
   const cleanQuery = isGenericFormat
     ? sanitizeQueryForApi(artist)
     : sanitizeQueryForApi(`${artist} ${album}`);
 
-  // 1. iTunes Album Search
-  const results = await queryItunes(cleanQuery, 'album');
-  const validResults = results.filter(r => Boolean(r.artworkUrl100));
+  // 1. iTunes Album Search (US, then GB storefront fallback for UK/EU catalog like 21 Singles)
+  let results = await queryItunes(cleanQuery, 'album', 'us');
+  let validResults = results.filter(r => Boolean(r.artworkUrl100));
 
   let scored = [];
   if (validResults.length > 0) {
@@ -417,9 +352,21 @@ async function resolveRelease({ artist, album, checkBandcamp, checkPlatforms }) 
       .sort((a, b) => b.score - a.score);
   }
 
-  // 2. iTunes Track Fallback
   if (!scored.length && album && !isGenericFormat) {
-    const songResults = await queryItunes(cleanQuery, 'song');
+    const gbResults = await queryItunes(cleanQuery, 'album', 'gb');
+    const validGb = gbResults.filter(r => Boolean(r.artworkUrl100));
+    if (validGb.length > 0) {
+      const hasFullAlbumAlt = validGb.some(r => (r.trackCount || 0) > 1 && !(r.collectionName || '').toLowerCase().includes('booklet'));
+      scored = validGb
+        .map(item => ({ item, score: scoreItemMatch(item, artist, album, false, hasFullAlbumAlt) }))
+        .filter(entry => entry.score > 0)
+        .sort((a, b) => b.score - a.score);
+    }
+  }
+
+  // 2. iTunes Track Fallback (also runs for generic "Artist - Single" and track-titled queries like Joy Division - Heart and Soul)
+  if (!scored.length && album) {
+    const songResults = await queryItunes(cleanQuery, 'song', 'us');
     const validSongs = songResults.filter(r => Boolean(r.artworkUrl100));
     if (validSongs.length > 0) {
       const seenCollections = new Set();
@@ -502,52 +449,7 @@ async function resolveRelease({ artist, album, checkBandcamp, checkPlatforms }) 
     ? bestMatch.directUrl
     : bestMatch.artworkUrl100.replace(/\d+x\d+bb/, '1500x1500bb');
   const releaseType = classifyReleaseType(bestMatch, sourceName);
-
-  // Resolve Platform Availability Links concurrently on the server
-  const platforms = {
-    appleMusic: normalizeAppleAlbumUrl(bestMatch.collectionViewUrl),
-    spotify: null,
-    tidal: null,
-    bandcamp: bestMatch.bandcampPageUrl || null
-  };
-
-  let seedUrl = platforms.appleMusic || bestMatch.seedPlatformUrl || null;
-  if (!seedUrl) {
-    const itHits = await queryItunes(sanitizeQueryForApi(`${bestMatch.artistName} ${bestMatch.collectionName}`), 'album');
-    for (const hit of itHits) {
-      if (evaluateArtistMatch(cleanString(hit.artistName, true), cleanString(bestMatch.artistName, true)) > 0 &&
-          hasWordOverlap(cleanString(bestMatch.collectionName, false), cleanString(hit.collectionName, false))) {
-        seedUrl = normalizeAppleAlbumUrl(hit.collectionViewUrl);
-        if (!platforms.appleMusic) platforms.appleMusic = seedUrl;
-        break;
-      }
-    }
-  }
-
-  const tasks = [];
-  if (checkPlatforms && seedUrl) {
-    tasks.push(resolveOdesliLinks(seedUrl).then(odesli => {
-      if (odesli.appleMusic) platforms.appleMusic = odesli.appleMusic;
-      if (odesli.spotify) platforms.spotify = odesli.spotify;
-      if (odesli.tidal) platforms.tidal = odesli.tidal;
-    }));
-  }
-  if (checkBandcamp && !platforms.bandcamp) {
-    tasks.push(queryBandcamp(bestMatch.artistName, bestMatch.collectionName).then(bc => {
-      if (bc && bc.bandcampPageUrl) platforms.bandcamp = bc.bandcampPageUrl;
-    }));
-  }
-
-  await Promise.all(tasks);
-
-  // Fallback to MusicBrainz URL relations if Spotify, Tidal, or Bandcamp are still missing
-  if ((checkPlatforms && (!platforms.spotify || !platforms.tidal)) || (checkBandcamp && !platforms.bandcamp)) {
-    const mbLinks = await fetchMusicBrainzExternalLinks(bestMatch.artistName, bestMatch.collectionName);
-    if (!platforms.appleMusic && mbLinks.appleMusic) platforms.appleMusic = mbLinks.appleMusic;
-    if (!platforms.spotify && mbLinks.spotify) platforms.spotify = mbLinks.spotify;
-    if (!platforms.tidal && mbLinks.tidal) platforms.tidal = mbLinks.tidal;
-    if (!platforms.bandcamp && mbLinks.bandcamp) platforms.bandcamp = mbLinks.bandcamp;
-  }
+  const appleUrl = normalizeAppleAlbumUrl(bestMatch.collectionViewUrl);
 
   return {
     status: 'Found',
@@ -558,6 +460,8 @@ async function resolveRelease({ artist, album, checkBandcamp, checkPlatforms }) 
     isHighConfidence,
     hiResUrl,
     alternates,
-    platforms
+    appleMusicUrl: appleUrl,
+    seedPlatformUrl: appleUrl || bestMatch.seedPlatformUrl || '',
+    bandcampPageUrl: bestMatch.bandcampPageUrl || null
   };
 }
