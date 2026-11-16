@@ -205,7 +205,7 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 5px;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       padding-top: 8px;
       border-top: 1px solid #1e293b;
     }
@@ -259,6 +259,25 @@
       border: 1px solid rgba(98, 153, 172, 0.35);
     }
     .platform-pill.available-bandcamp:hover { background: rgba(98, 153, 172, 0.3); color: #fff; }
+
+    .check-links-btn {
+      width: 100%;
+      background: rgba(56, 189, 248, 0.12);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 5px 8px;
+      border-radius: 4px;
+      font-size: 0.74rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+    .check-links-btn:hover { background: rgba(56, 189, 248, 0.25); color: #fff; }
+    .check-links-btn.rate-limited {
+      background: rgba(245, 158, 11, 0.14);
+      color: #fbbf24;
+      border-color: rgba(245, 158, 11, 0.35);
+    }
 
     .card a.primary-btn {
       display: block;
@@ -386,7 +405,7 @@
 <body>
   <div class="container">
     <h1>Multi-Source Album Artwork Finder</h1>
-    <p>Searches <strong>Apple Music / iTunes</strong>, <strong>Deezer</strong>, <strong>MusicBrainz / Cover Art Archive</strong>, and <strong>Bandcamp</strong>. Automatically detects release format and resolves platform availability links.</p>
+    <p>Searches <strong>Apple Music / iTunes</strong>, <strong>Deezer</strong>, <strong>MusicBrainz / Cover Art Archive</strong>, and <strong>Bandcamp</strong>. Auto-resolves streaming links for batches up to 8 albums and supports on-demand link checks for larger lists.</p>
 
     <div class="input-wrapper">
       <textarea id="inputList" placeholder="Paste your list here (e.g. Artist - Album)..."></textarea>
@@ -403,7 +422,7 @@
         <input type="checkbox" id="enableBandcampProxy" checked> Auto-check Bandcamp
       </label>
       <label style="font-size: 0.82rem; color: #94a3b8; display: inline-flex; align-items: center; gap: 5px; margin-left: 6px;">
-        <input type="checkbox" id="enablePlatformLinks" checked> Resolve streaming platform links
+        <input type="checkbox" id="enablePlatformLinks" checked> Resolve streaming links (auto for &le; 8 items)
       </label>
       <span id="status"></span>
     </div>
@@ -439,6 +458,7 @@
 
   <script>
     var batchRecords = [];
+    var AUTO_ODESLI_BATCH_LIMIT = 8;
 
     function sleep(ms) {
       return new Promise(function(resolve) {
@@ -531,7 +551,7 @@
       document.getElementById('outputLinks').value = lines.join('\n');
     }
 
-    function buildPlatformPillsHtml(links, checkedStreaming, checkedBandcamp) {
+    function buildPlatformPillsHtml(links, checkedStreaming, checkedBandcamp, odesliState) {
       function makePill(label, url, availClass, unavailText) {
         if (url) {
           return '<a href="' + url + '" target="_blank" rel="noopener noreferrer" class="platform-pill ' + availClass + '">' + label + ' &#8599;</a>';
@@ -540,12 +560,23 @@
       }
 
       var appleHtml = makePill('Apple Music', links.appleMusic, 'available-apple', 'No Apple Music');
-      var spotifyHtml = checkedStreaming
-        ? makePill('Spotify', links.spotify, 'available-spotify', 'No Spotify')
-        : '<span class="platform-pill unavailable">Spotify Skipped</span>';
-      var tidalHtml = checkedStreaming
-        ? makePill('Tidal', links.tidal, 'available-tidal', 'No Tidal')
-        : '<span class="platform-pill unavailable">Tidal Skipped</span>';
+      
+      var spotifyHtml = '';
+      var tidalHtml = '';
+      if (!checkedStreaming) {
+        spotifyHtml = '<span class="platform-pill unavailable">Spotify Skipped</span>';
+        tidalHtml = '<span class="platform-pill unavailable">Tidal Skipped</span>';
+      } else if (odesliState === 'deferred') {
+        spotifyHtml = makePill('Spotify', links.spotify, 'available-spotify', 'Spotify Pending');
+        tidalHtml = makePill('Tidal', links.tidal, 'available-tidal', 'Tidal Pending');
+      } else if (odesliState === 'rate_limited') {
+        spotifyHtml = makePill('Spotify', links.spotify, 'available-spotify', 'Spotify Rate-Limited');
+        tidalHtml = makePill('Tidal', links.tidal, 'available-tidal', 'Tidal Rate-Limited');
+      } else {
+        spotifyHtml = makePill('Spotify', links.spotify, 'available-spotify', 'No Spotify');
+        tidalHtml = makePill('Tidal', links.tidal, 'available-tidal', 'No Tidal');
+      }
+
       var bcHtml = (checkedBandcamp || links.bandcamp)
         ? makePill('Bandcamp', links.bandcamp, 'available-bandcamp', 'No Bandcamp')
         : '<span class="platform-pill unavailable">Bandcamp Skipped</span>';
@@ -553,7 +584,7 @@
       return appleHtml + spotifyHtml + tidalHtml + bcHtml;
     }
 
-    function renderCardElement(recIndex, data, isManual) {
+    function renderCardElement(recIndex, data, isManual, isLargeBatch) {
       var grid = document.getElementById('cardGrid');
       var card = document.createElement('div');
       card.id = 'card_' + recIndex;
@@ -591,6 +622,15 @@
         ? '<a href="' + data.bandcampPageUrl + '" target="_blank" rel="noopener noreferrer" class="platform-pill available-bandcamp">Bandcamp &#8599;</a>'
         : '<span class="platform-pill loading">Checking Bandcamp...</span>';
 
+      var spotifyInit = isLargeBatch
+        ? '<span class="platform-pill unavailable">Spotify Pending</span>'
+        : '<span class="platform-pill loading">Checking Spotify...</span>';
+      var tidalInit = isLargeBatch
+        ? '<span class="platform-pill unavailable">Tidal Pending</span>'
+        : '<span class="platform-pill loading">Checking Tidal...</span>';
+
+      var actionBtnHtml = '<button type="button" id="check_links_btn_' + recIndex + '" class="check-links-btn" style="display:' + (isLargeBatch ? 'block' : 'none') + ';" onclick="manualCheckLinks(' + recIndex + ')">Check Spotify &amp; Tidal Links</button>';
+
       card.innerHTML = 
         '<div class="img-wrapper">' +
           '<img src="' + data.hiResUrl + '" alt="' + (data.matchedTitle || '') + '" class="main-art" loading="lazy" onerror="handleImageFallback(this)">' +
@@ -609,10 +649,11 @@
           '<div>' +
             '<div class="platforms-grid" id="platforms_' + recIndex + '">' +
               initialApple +
-              '<span class="platform-pill loading">Checking Spotify...</span>' +
-              '<span class="platform-pill loading">Checking Tidal...</span>' +
+              spotifyInit +
+              tidalInit +
               initialBc +
             '</div>' +
+            actionBtnHtml +
             '<a href="' + data.hiResUrl + '" target="_blank" rel="noopener noreferrer" class="primary-btn">Open Image</a>' +
             alternatesHtml +
           '</div>' +
@@ -620,25 +661,39 @@
       grid.appendChild(card);
     }
 
-    // Browser-side Odesli resolution (uses user's residential/workplace IP, bypassing Cloudflare IP blocks)
     async function queryOdesliClientSide(seedUrl) {
-      if (!seedUrl) return null;
+      if (!seedUrl) return { status: 'no_seed' };
       try {
         var res = await fetch('https://api.song.link/v1-alpha.1/links?url=' + encodeURIComponent(seedUrl) + '&userCountry=US');
-        if (!res.ok) return null;
+        if (res.status === 429) {
+          return { status: 'rate_limited' };
+        }
+        if (!res.ok) {
+          return { status: 'error' };
+        }
         var data = await res.json();
         var byPlat = data.linksByPlatform || {};
         return {
+          status: 'ok',
           appleMusic: byPlat.appleMusic ? byPlat.appleMusic.url : null,
           spotify: byPlat.spotify ? byPlat.spotify.url : null,
           tidal: byPlat.tidal ? byPlat.tidal.url : null
         };
       } catch (e) {
-        return null;
+        return { status: 'error' };
       }
     }
 
-    async function resolveLinksForCard(recIndex) {
+    async function manualCheckLinks(recIndex) {
+      var btn = document.getElementById('check_links_btn_' + recIndex);
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Checking Spotify & Tidal...';
+      }
+      await resolveLinksForCard(recIndex, true);
+    }
+
+    async function resolveLinksForCard(recIndex, runOdesliNow) {
       var rec = batchRecords[recIndex];
       if (!rec || rec.status !== 'Found') return;
 
@@ -653,10 +708,11 @@
                    '&bandcamp=' + checkBandcamp +
                    '&platforms=' + checkPlatforms;
 
+      // Start with existing preserved links so we NEVER overwrite a known Apple Music link with null
       var links = {
         appleMusic: rec.platforms.appleMusic || null,
-        spotify: null,
-        tidal: null,
+        spotify: rec.platforms.spotify || null,
+        tidal: rec.platforms.tidal || null,
         bandcamp: rec.platforms.bandcamp || null,
         seedUrl: rec.seedPlatformUrl || null
       };
@@ -673,20 +729,46 @@
         }
       } catch (e) {}
 
-      // If Spotify or Tidal are still missing, resolve via Odesli directly from the user's browser IP
-      if (checkPlatforms && (!links.spotify || !links.tidal) && links.seedUrl) {
-        var clientOdesli = await queryOdesliClientSide(links.seedUrl);
-        if (clientOdesli) {
-          if (!links.appleMusic && clientOdesli.appleMusic) links.appleMusic = clientOdesli.appleMusic;
-          if (!links.spotify && clientOdesli.spotify) links.spotify = clientOdesli.spotify;
-          if (!links.tidal && clientOdesli.tidal) links.tidal = clientOdesli.tidal;
+      var odesliState = 'complete';
+      var actionBtn = document.getElementById('check_links_btn_' + recIndex);
+
+      if (checkPlatforms && (!links.spotify || !links.tidal)) {
+        if (!runOdesliNow) {
+          odesliState = 'deferred';
+          if (actionBtn) {
+            actionBtn.style.display = 'block';
+            actionBtn.disabled = false;
+            actionBtn.textContent = 'Check Spotify & Tidal Links';
+          }
+        } else if (links.seedUrl) {
+          var clientOdesli = await queryOdesliClientSide(links.seedUrl);
+          if (clientOdesli.status === 'rate_limited') {
+            odesliState = 'rate_limited';
+            if (actionBtn) {
+              actionBtn.style.display = 'block';
+              actionBtn.disabled = false;
+              actionBtn.classList.add('rate-limited');
+              actionBtn.textContent = 'Rate-Limited by Odesli — Retry in ~45s';
+            }
+          } else {
+            if (clientOdesli.status === 'ok') {
+              if (!links.appleMusic && clientOdesli.appleMusic) links.appleMusic = clientOdesli.appleMusic;
+              if (!links.spotify && clientOdesli.spotify) links.spotify = clientOdesli.spotify;
+              if (!links.tidal && clientOdesli.tidal) links.tidal = clientOdesli.tidal;
+            }
+            if (actionBtn) {
+              actionBtn.style.display = 'none';
+            }
+          }
         }
+      } else if (actionBtn) {
+        actionBtn.style.display = 'none';
       }
 
       rec.platforms = links;
       var platGrid = document.getElementById('platforms_' + recIndex);
       if (platGrid) {
-        platGrid.innerHTML = buildPlatformPillsHtml(links, checkPlatforms, checkBandcamp);
+        platGrid.innerHTML = buildPlatformPillsHtml(links, checkPlatforms, checkBandcamp, odesliState);
       }
     }
 
@@ -728,9 +810,9 @@
         source: 'Manual Paste',
         isHighConfidence: true,
         hiResUrl: url
-      }, true);
+      }, true, false);
 
-      resolveLinksForCard(recIndex);
+      resolveLinksForCard(recIndex, true);
     }
 
     function selectAlternate(recordIndex, altIdx, newUrl, newTitle, newArtist, newRelType, newAppleUrl) {
@@ -773,7 +855,7 @@
             '<span class="platform-pill loading">Checking Tidal...</span>' +
             '<span class="platform-pill loading">Checking Bandcamp...</span>';
         }
-        resolveLinksForCard(recordIndex);
+        resolveLinksForCard(recordIndex, true);
       }
     }
 
@@ -1058,10 +1140,12 @@
 
       var foundIndices = [];
       var notFoundIndices = [];
+      var isLargeBatch = lines.length > AUTO_ODESLI_BATCH_LIMIT;
+
       for (var i = 0; i < batchRecords.length; i++) {
         var rec = batchRecords[i];
         if (rec.status === 'Found') {
-          renderCardElement(i, rec.rawResult, false);
+          renderCardElement(i, rec.rawResult, false, isLargeBatch);
           foundIndices.push(i);
         } else {
           notFoundIndices.push(i);
@@ -1092,15 +1176,22 @@
         }).join('');
       }
 
-      // Resolve links sequentially with 600ms pacing so Odesli's 10 req/min limit isn't exceeded
-      status.textContent = 'Resolving streaming links for ' + foundIndices.length + ' albums...';
       btn.disabled = false;
 
-      for (var j = 0; j < foundIndices.length; j++) {
-        await resolveLinksForCard(foundIndices[j]);
-        if (j < foundIndices.length - 1) await sleep(600);
+      if (isLargeBatch) {
+        status.textContent = 'Completed ' + lines.length + ' items (Apple Music & Bandcamp resolved; click "Check Spotify & Tidal Links" on individual cards to avoid rate limits).';
+        for (var k = 0; k < foundIndices.length; k++) {
+          await resolveLinksForCard(foundIndices[k], false);
+          if (k < foundIndices.length - 1) await sleep(1100);
+        }
+      } else {
+        status.textContent = 'Resolving streaming links for ' + foundIndices.length + ' albums...';
+        for (var j = 0; j < foundIndices.length; j++) {
+          await resolveLinksForCard(foundIndices[j], true);
+          if (j < foundIndices.length - 1) await sleep(1200);
+        }
+        status.textContent = 'Completed ' + lines.length + ' items.';
       }
-      status.textContent = 'Completed ' + lines.length + ' items.';
     }
   </script>
 </body>
